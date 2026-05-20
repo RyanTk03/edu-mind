@@ -1,89 +1,236 @@
 # EDU-MIND Backend
 
-Backend API for the EDU-MIND learning platform.
+AI-powered educational assistant backend built with FastAPI, MongoDB, and Beanie ODM.
 
-## Tech Stack
+## Prerequisites
 
-- **Python 3.12+**
-- **MongoDB** (via MongoDB Atlas)
-- **Beanie** - Async ODM for MongoDB
-- **Pydantic** - Data validation
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- MongoDB (local or Atlas)
 
-## Project Structure
-
-```
-backend/
-├── main.py                 # Entry point
-├── pyproject.toml          # Dependencies & build config
-├── .env                    # Environment variables (not in git)
-├── .env.example            # Environment template
-└── app/
-    ├── __init__.py
-    ├── config.py           # Settings from environment
-    ├── core/
-    │   ├── __init__.py
-    │   └── database.py     # Database connection
-    ├── models/
-    │   ├── __init__.py
-    │   ├── user.py         # User, UserProfile
-    │   ├── session.py      # Study sessions
-    │   ├── attachment.py   # File attachments
-    │   ├── message.py      # Chat messages
-    │   └── exercise.py     # Exercises & questions
-    └── seeds/
-        ├── __init__.py
-        └── seed.py         # Database seeding
-```
-
-## Setup
-
-### 1. Install dependencies
+## Installation
 
 ```bash
+# Navigate to backend
 cd backend
+
+# Install dependencies
 uv sync
-```
 
-### 2. Configure environment
-
-Copy `.env.example` to `.env` and fill in your MongoDB Atlas credentials:
-
-```bash
+# Copy environment file
 cp .env.example .env
 ```
 
-Edit `.env`:
+## Configuration
+
+Edit `.env` with your settings:
+
 ```env
+# MongoDB - Local
+DB_HOST=localhost:27017
+DB_NAME=edu_mind
+
+# MongoDB - Atlas (cloud)
 DB_USER=your_username
 DB_PASSWORD=your_password
 DB_HOST=cluster0.xxxxx.mongodb.net
 DB_NAME=edu_mind
 DB_OPTIONS=retryWrites=true&w=majority&appName=Cluster0
+
+# JWT Authentication
+JWT_SECRET_KEY=your-super-secret-key-change-in-production
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# File uploads
+UPLOAD_DIR=./uploads
+MAX_UPLOAD_SIZE_MB=50
+
+# CORS
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 ```
 
-### 3. Verify connection
+## Running the Server
 
 ```bash
-.venv/bin/python main.py
+# With uv (recommended)
+uv run uvicorn app.main:app --reload
+
+# Or activate venv first
+source .venv/bin/activate
+uvicorn app.main:app --reload
+
+# Custom port
+uvicorn app.main:app --reload --port 8080
 ```
 
-## Commands
+The server will start at `http://127.0.0.1:8000`
 
-All commands should be run from the `backend/` directory.
+## API Documentation
 
-| Command | Description |
-|---------|-------------|
-| `.venv/bin/python main.py` | Verify database connection |
-| `.venv/bin/python -m app.seeds.seed` | Seed test data |
-| `.venv/bin/python -m app.seeds.seed --clear` | Clear all data |
+Once the server is running:
 
-## Database Collections
+| Resource | URL |
+|----------|-----|
+| Swagger UI | http://localhost:8000/docs |
+| ReDoc | http://localhost:8000/redoc |
+| OpenAPI JSON | http://localhost:8000/openapi.json |
+| Health Check | http://localhost:8000/health |
 
-| Collection | Description |
-|------------|-------------|
-| `users` | User accounts (email, password hash, name) |
-| `user_profiles` | Learning profiles (level, weak/strong points) |
-| `sessions` | Study sessions (like notebooks) |
-| `attachments` | Uploaded files (PDFs, etc.) |
-| `messages` | Chat messages within sessions |
-| `exercises` | Exercises with questions |
+## Authentication
+
+The API uses JWT Bearer tokens.
+
+### Register a new user
+
+```bash
+curl -X POST http://localhost:8000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "securepass123", "name": "John Doe"}'
+```
+
+### Login
+
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "securepass123"}'
+```
+
+Response:
+```json
+{
+  "access_token": "eyJ...",
+  "refresh_token": "eyJ...",
+  "token_type": "bearer"
+}
+```
+
+### Use the token
+
+```bash
+curl http://localhost:8000/api/auth/me \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### Refresh token
+
+```bash
+curl -X POST http://localhost:8000/api/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token": "YOUR_REFRESH_TOKEN"}'
+```
+
+## API Endpoints
+
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/register` | Register new user |
+| POST | `/api/auth/login` | Login and get tokens |
+| POST | `/api/auth/refresh` | Refresh access token |
+| GET | `/api/auth/me` | Get current user |
+
+### Users
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/users/profile` | Get user profile |
+| PATCH | `/api/users/profile` | Update user profile |
+
+### Sessions
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/sessions` | List all sessions |
+| POST | `/api/sessions` | Create new session |
+| GET | `/api/sessions/{id}` | Get session details |
+| PATCH | `/api/sessions/{id}` | Update session |
+| DELETE | `/api/sessions/{id}` | Delete session |
+
+### Attachments
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/sessions/{id}/attachments` | List attachments |
+| POST | `/api/sessions/{id}/attachments` | Upload file |
+| GET | `/api/sessions/{id}/attachments/{aid}` | Get attachment info |
+| DELETE | `/api/sessions/{id}/attachments/{aid}` | Delete attachment |
+| GET | `/api/sessions/{id}/attachments/{aid}/download` | Download file |
+| GET | `/api/sessions/{id}/attachments/{aid}/status` | Processing status |
+
+### Chat Messages
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/sessions/{id}/chat` | Get chat history |
+| POST | `/api/sessions/{id}/chat` | Send message |
+| DELETE | `/api/sessions/{id}/chat` | Clear chat history |
+
+### Exercises
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/sessions/{id}/exercises` | List exercises |
+| POST | `/api/sessions/{id}/exercises/generate` | Generate exercise |
+| GET | `/api/sessions/{id}/exercises/{eid}` | Get exercise |
+| POST | `/api/sessions/{id}/exercises/{eid}/submit` | Submit answers |
+| GET | `/api/sessions/{id}/exercises/{eid}/results` | Get results |
+
+## Project Structure
+
+```
+backend/
+├── app/
+│   ├── __init__.py
+│   ├── main.py              # FastAPI app entry point
+│   ├── config.py            # Settings from environment
+│   ├── api/                  # Route handlers
+│   │   ├── router.py        # Main API router
+│   │   ├── auth.py          # Authentication endpoints
+│   │   ├── users.py         # User profile endpoints
+│   │   ├── sessions.py      # Session CRUD
+│   │   ├── attachments.py   # File upload/download
+│   │   ├── messages.py      # Chat functionality
+│   │   └── exercises.py     # Exercise generation
+│   ├── core/                 # Core utilities
+│   │   ├── database.py      # MongoDB/Beanie setup
+│   │   ├── security.py      # JWT & password hashing
+│   │   ├── exceptions.py    # Custom exceptions
+│   │   └── deps.py          # Auth dependencies
+│   ├── models/              # Beanie document models
+│   ├── schemas/             # Pydantic DTOs
+│   └── seeds/               # Database seeding
+├── .env.example
+├── pyproject.toml
+└── README.md
+```
+
+## Development
+
+### Using Docker for MongoDB
+
+```bash
+docker run -d -p 27017:27017 --name mongodb mongo:latest
+```
+
+### Seed the database
+
+```bash
+uv run python -m app.seeds.seed
+```
+
+## Troubleshooting
+
+### MongoDB Atlas SSL Error
+
+If you get `SSL handshake failed` errors:
+1. Whitelist your IP in MongoDB Atlas -> Network Access
+2. Or use local MongoDB for development
+
+### Module not found
+
+```bash
+uv sync  # Reinstall dependencies
+```
+
+### Port already in use
+
+```bash
+uvicorn app.main:app --reload --port 8080
+```
