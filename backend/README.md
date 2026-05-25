@@ -48,7 +48,17 @@ MAX_UPLOAD_SIZE_MB=50
 
 # CORS
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# AI / LLM (required for chat & exercises)
+GROQ_API_KEY=your_groq_api_key_here
 ```
+
+### Getting a GROQ API Key
+
+1. Go to [https://console.groq.com](https://console.groq.com)
+2. Sign up for a free account
+3. Navigate to API Keys and create a new key
+4. Copy the key to your `.env` file
 
 ## Running the Server
 
