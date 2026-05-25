@@ -5,10 +5,12 @@ from datetime import datetime, timezone
 from beanie import PydanticObjectId
 from fastapi import APIRouter
 
+from app.api import get_link_id, check_link_id
 from app.core.deps import CurrentUser
 from app.core.exceptions import BadRequestError, ForbiddenError, NotFoundError
-from app.models.exercise import Exercise, ExerciseStatus
+from app.models.exercise import Exercise, ExerciseMode, ExerciseStatus, Question, QuestionType
 from app.models.session import Session
+from app.models.user import UserProfile
 from app.schemas.exercise import (
     ExerciseGenerateRequest,
     ExerciseListResponse,
@@ -19,6 +21,7 @@ from app.schemas.exercise import (
     QuestionResponse,
     QuestionWithAnswerResponse,
 )
+from app.services.ai_service import AIService
 
 router = APIRouter(prefix="/sessions/{session_id}/exercises", tags=["Exercises"])
 
@@ -35,7 +38,7 @@ async def verify_session_ownership(
     if not session:
         raise NotFoundError("Session not found")
 
-    if session.user.ref.id != current_user.id:
+    if not check_link_id(session.user, current_user.id):
         raise ForbiddenError("Not your session")
 
     return session
@@ -77,7 +80,7 @@ def exercise_to_response(exercise: Exercise) -> ExerciseResponse:
     """Convert exercise model to response schema."""
     return ExerciseResponse(
         id=str(exercise.id),
-        session_id=str(exercise.session.ref.id),
+        session_id=get_link_id(exercise.session),
         title=exercise.title,
         mode=exercise.mode,
         status=exercise.status,
@@ -92,7 +95,7 @@ def exercise_to_results_response(exercise: Exercise) -> ExerciseResultsResponse:
     """Convert exercise to results response with full details."""
     return ExerciseResultsResponse(
         id=str(exercise.id),
-        session_id=str(exercise.session.ref.id),
+        session_id=get_link_id(exercise.session),
         title=exercise.title,
         mode=exercise.mode,
         status=exercise.status,
@@ -120,24 +123,61 @@ async def list_exercises(session_id: str, current_user: CurrentUser):
 async def generate_exercise(
     session_id: str, data: ExerciseGenerateRequest, current_user: CurrentUser
 ):
-    """Generate a new exercise (placeholder - requires AI agent integration)."""
+    """Generate a new exercise using AI."""
     session = await verify_session_ownership(session_id, current_user)
 
-    # TODO: AI agent integration
-    # For now, create an empty exercise that can be populated later
-    # Later, the exercise agent will:
-    # 1. Get user profile (level, weak_points)
-    # 2. Query ChromaDB for relevant content
-    # 3. Generate questions based on mode
+    # Get user profile for student level and weak points
+    profile = await UserProfile.find_one(UserProfile.user.id == current_user.id)
+    student_level = profile.level_score if profile else 0.5
+    weak_points = profile.weak_points if profile else []
 
-    title = data.title or f"Exercise - {data.mode.value}"
+    # Determine topic based on mode
+    if data.mode == ExerciseMode.REINFORCEMENT and weak_points:
+        topic = f"Renforcement sur: {', '.join(weak_points[:3])}"
+    else:
+        topic = data.title or "Exercice général"
+
+    # Determine difficulty based on student level
+    if student_level < 0.35:
+        difficulty = "easy"
+    elif student_level < 0.65:
+        difficulty = "medium"
+    else:
+        difficulty = "hard"
+
+    # Get exercise history from session
+    session_metadata = session.metadata or {}
+    history = session_metadata.get("exercise_history", [])
+
+    # Generate questions using AI
+    questions = []
+    for i in range(data.num_questions):
+        # Generate one exercise at a time
+        ai_exercise = await AIService.generate_exercise(
+            session_id=session_id,
+            topic=topic,
+            difficulty=difficulty,
+            student_level=student_level,
+            history=history,
+        )
+
+        question = Question(
+            order=i + 1,
+            type=QuestionType.OPEN,  # AI generates open questions by default
+            question_text=ai_exercise.get("question", ""),
+            correct_answer=ai_exercise.get("expected_answer", ""),
+            options=[],  # Could be extended for QCM
+        )
+        questions.append(question)
+
+    title = data.title or f"Exercice - {data.mode.value}"
 
     exercise = Exercise(
         session=session,
         title=title,
         mode=data.mode,
-        status=ExerciseStatus.PENDING,
-        questions=[],  # AI agent will populate this
+        status=ExerciseStatus.IN_PROGRESS,
+        questions=questions,
     )
     await exercise.insert()
 
@@ -159,7 +199,7 @@ async def get_exercise(
     if not exercise:
         raise NotFoundError("Exercise not found")
 
-    if exercise.session.ref.id != session.id:
+    if not check_link_id(exercise.session, session.id):
         raise ForbiddenError("Exercise doesn't belong to this session")
 
     return exercise_to_response(exercise)
@@ -172,7 +212,7 @@ async def submit_exercise(
     data: ExerciseSubmitRequest,
     current_user: CurrentUser,
 ):
-    """Submit answers for an exercise."""
+    """Submit answers for an exercise with AI-powered correction."""
     session = await verify_session_ownership(session_id, current_user)
 
     try:
@@ -183,40 +223,69 @@ async def submit_exercise(
     if not exercise:
         raise NotFoundError("Exercise not found")
 
-    if exercise.session.ref.id != session.id:
+    if not check_link_id(exercise.session, session.id):
         raise ForbiddenError("Exercise doesn't belong to this session")
 
     if exercise.status == ExerciseStatus.COMPLETED:
         raise BadRequestError("Exercise already completed")
 
+    # Get user profile for student level
+    profile = await UserProfile.find_one(UserProfile.user.id == current_user.id)
+    student_level = profile.level_score if profile else 0.5
+
     # Process answers
     answer_map = {a.question_order: a.answer for a in data.answers}
     correct_count = 0
+    total_score_sum = 0.0
+    all_errors = []
 
     for question in exercise.questions:
         if question.order in answer_map:
             question.user_answer = answer_map[question.order]
             question.answered_at = datetime.now(timezone.utc)
 
-            # Simple correctness check (for QCM)
-            # TODO: AI agent for open/code questions
-            question.is_correct = (
-                question.user_answer.strip().lower()
-                == question.correct_answer.strip().lower()
+            # Use AI for correction
+            correction = await AIService.correct_answer(
+                session_id=session_id,
+                exercise={
+                    "question": question.question_text,
+                    "expected_answer": question.correct_answer,
+                },
+                student_answer=question.user_answer,
+                student_level=student_level,
             )
+
+            question.is_correct = correction.get("is_correct", False)
+            question.gap_analysis = ", ".join(correction.get("errors", []))
+            total_score_sum += correction.get("score", 0.0)
 
             if question.is_correct:
                 correct_count += 1
 
-    # Calculate score
+            # Collect errors for profile update
+            all_errors.extend(correction.get("errors", []))
+
+            # Update student level progressively
+            if correction.get("updated_level"):
+                student_level = correction["updated_level"]
+
+    # Calculate final score
     if exercise.questions:
-        exercise.total_score = (correct_count / len(exercise.questions)) * 100
+        exercise.total_score = (total_score_sum / len(exercise.questions)) * 100
 
     exercise.status = ExerciseStatus.COMPLETED
     exercise.completed_at = datetime.now(timezone.utc)
     await exercise.save()
 
-    # TODO: Update user profile with weak/strong points (AI agent)
+    # Update user profile with weak points and new level
+    if profile:
+        profile.level_score = student_level
+        for error in all_errors:
+            if error and error not in profile.weak_points:
+                profile.weak_points.append(error)
+        # Keep only last 20 weak points
+        profile.weak_points = profile.weak_points[-20:]
+        await profile.save()
 
     return exercise_to_results_response(exercise)
 
@@ -236,7 +305,7 @@ async def get_exercise_results(
     if not exercise:
         raise NotFoundError("Exercise not found")
 
-    if exercise.session.ref.id != session.id:
+    if not check_link_id(exercise.session, session.id):
         raise ForbiddenError("Exercise doesn't belong to this session")
 
     if exercise.status != ExerciseStatus.COMPLETED:

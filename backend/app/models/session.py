@@ -15,6 +15,7 @@ class Session(Document):
     description: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    metadata: dict = Field(default_factory=dict)  # For AI state (current_exercise, history)
 
     class Settings:
         name = "sessions"
