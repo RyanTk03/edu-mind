@@ -6,7 +6,7 @@ from pathlib import Path
 
 import aiofiles
 from beanie import PydanticObjectId
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, UploadFile
 from fastapi.responses import FileResponse
 
 from app.config import settings
@@ -20,6 +20,7 @@ from app.core.exceptions import (
 from app.models.attachment import Attachment
 from app.models.session import Session
 from app.schemas.attachment import AttachmentResponse, AttachmentStatusResponse
+from app.services.ai_service import AIService
 
 router = APIRouter(prefix="/sessions/{session_id}/attachments", tags=["Attachments"])
 
@@ -30,6 +31,52 @@ ALLOWED_TYPES = {
     "text/plain": ".txt",
     "text/markdown": ".md",
 }
+
+
+async def process_attachment_for_rag(
+    attachment_id: str,
+    session_id: str,
+    file_path: str,
+    file_type: str,
+    original_filename: str,
+):
+    """Background task to process attachment and ingest into RAG."""
+    try:
+        attachment = await Attachment.get(PydanticObjectId(attachment_id))
+        if not attachment:
+            return
+
+        chunk_count = 0
+
+        if file_type == "application/pdf":
+            # Ingest PDF using AI service
+            chunk_count = await AIService.ingest_pdf_file(
+                session_id=session_id,
+                pdf_path=file_path,
+                metadata={"filename": original_filename},
+            )
+        elif file_type in ("text/plain", "text/markdown"):
+            # Read and ingest text file
+            async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+                content = await f.read()
+            chunk_count = await AIService.ingest_document(
+                session_id=session_id,
+                content=content,
+                source=original_filename,
+            )
+        # TODO: Add support for DOCX files
+
+        # Update attachment status
+        attachment.is_processed = True
+        attachment.chunk_count = chunk_count
+        await attachment.save()
+
+    except Exception as e:
+        # Update attachment with error
+        if attachment:
+            attachment.is_processed = False
+            attachment.processing_error = str(e)
+            await attachment.save()
 
 
 async def verify_session_ownership(
@@ -82,9 +129,10 @@ async def list_attachments(session_id: str, current_user: CurrentUser):
 async def upload_attachment(
     session_id: str,
     current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
 ):
-    """Upload a file attachment to a session."""
+    """Upload a file attachment to a session and process for RAG."""
     session = await verify_session_ownership(session_id, current_user)
 
     # Validate file type
@@ -128,7 +176,15 @@ async def upload_attachment(
     )
     await attachment.insert()
 
-    # TODO: Trigger background processing for embeddings (AI agent integration later)
+    # Process document in background for RAG ingestion
+    background_tasks.add_task(
+        process_attachment_for_rag,
+        attachment_id=str(attachment.id),
+        session_id=session_id,
+        file_path=str(file_path),
+        file_type=file.content_type,
+        original_filename=file.filename or "unknown",
+    )
 
     return attachment_to_response(attachment)
 

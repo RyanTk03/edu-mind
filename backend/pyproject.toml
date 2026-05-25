@@ -26,6 +26,18 @@ dependencies = [
     # Utils
     "python-dotenv>=1.0.0",
     "aiofiles>=24.1.0",
+
+    # AI / LLM
+    "langchain>=0.3.0",
+    "langchain-groq>=0.2.0",
+    "langchain-community>=0.3.0",
+    "langchain-text-splitters>=0.3.0",
+    "langgraph>=0.2.0",
+
+    # RAG / Embeddings
+    "chromadb>=0.5.0",
+    "sentence-transformers>=3.0.0",
+    "pypdf>=4.0.0",
 ]
 
 [build-system]
