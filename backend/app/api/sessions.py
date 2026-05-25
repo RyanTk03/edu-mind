@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from beanie import PydanticObjectId
 from fastapi import APIRouter
 
+from app.api import get_link_id, check_link_id
 from app.core.deps import CurrentUser
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.models.attachment import Attachment
@@ -40,7 +41,7 @@ def session_to_response(
     """Convert session model to response schema."""
     return SessionResponse(
         id=str(session.id),
-        user_id=str(session.user.ref.id),
+        user_id=get_link_id(session.user),
         title=session.title,
         description=session.description,
         created_at=session.created_at,
@@ -88,7 +89,7 @@ async def get_session(session_id: str, current_user: CurrentUser):
     if not session:
         raise NotFoundError("Session not found")
 
-    if session.user.ref.id != current_user.id:
+    if not check_link_id(session.user, current_user.id):
         raise ForbiddenError("Not your session")
 
     counts = await get_session_counts(session.id)
@@ -108,7 +109,7 @@ async def update_session(
     if not session:
         raise NotFoundError("Session not found")
 
-    if session.user.ref.id != current_user.id:
+    if not check_link_id(session.user, current_user.id):
         raise ForbiddenError("Not your session")
 
     if data.title is not None:
@@ -134,7 +135,7 @@ async def delete_session(session_id: str, current_user: CurrentUser):
     if not session:
         raise NotFoundError("Session not found")
 
-    if session.user.ref.id != current_user.id:
+    if not check_link_id(session.user, current_user.id):
         raise ForbiddenError("Not your session")
 
     # Delete related data

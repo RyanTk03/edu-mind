@@ -4,6 +4,7 @@ RAG System for EDU-MIND.
 Handles document ingestion and semantic retrieval using ChromaDB.
 """
 
+import logging
 import os
 from pathlib import Path
 from typing import Optional
@@ -15,6 +16,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
 
 from .config import ai_settings
+
+logger = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -30,11 +33,14 @@ def _get_client() -> chromadb.PersistentClient:
     global _client
     if _client is None:
         # Ensure directory exists
-        Path(ai_settings.chroma_persist_dir).mkdir(parents=True, exist_ok=True)
+        persist_dir = ai_settings.chroma_persist_dir
+        logger.info(f"Initializing ChromaDB client at: {persist_dir}")
+        Path(persist_dir).mkdir(parents=True, exist_ok=True)
         _client = chromadb.PersistentClient(
-            path=ai_settings.chroma_persist_dir,
+            path=persist_dir,
             settings=Settings(anonymized_telemetry=False),
         )
+        logger.info("ChromaDB client initialized successfully")
     return _client
 
 
@@ -42,7 +48,9 @@ def _get_embedder() -> SentenceTransformer:
     """Get or create embedding model."""
     global _embedder
     if _embedder is None:
+        logger.info(f"Loading embedding model: {ai_settings.embedding_model}")
         _embedder = SentenceTransformer(ai_settings.embedding_model)
+        logger.info("Embedding model loaded successfully")
     return _embedder
 
 
@@ -70,11 +78,14 @@ def create_collection(session_id: str) -> chromadb.Collection:
     """
     client = _get_client()
     collection_name = f"session_{session_id}"
+    logger.info(f"Getting/creating collection: {collection_name}")
 
-    return client.get_or_create_collection(
+    collection = client.get_or_create_collection(
         name=collection_name,
         metadata={"session_id": session_id},
     )
+    logger.info(f"Collection {collection_name} ready, current count: {collection.count()}")
+    return collection
 
 
 def delete_collection(session_id: str) -> bool:
@@ -115,6 +126,7 @@ def ingest_text(
     Returns:
         Number of chunks created.
     """
+    logger.info(f"Ingesting text for session {session_id}, source: {source}, length: {len(text)}")
     collection = create_collection(session_id)
 
     # Split text into chunks
@@ -124,13 +136,18 @@ def ingest_text(
         separators=["\n\n", "\n", ". ", " ", ""],
     )
     chunks = splitter.split_text(text)
+    logger.info(f"Split text into {len(chunks)} chunks")
 
     if not chunks:
+        logger.warning("No chunks created from text")
         return 0
 
     # Prepare data for ChromaDB
     ids = [f"{source}_{i}" for i in range(len(chunks))]
+    logger.info("Generating embeddings...")
     embeddings = _embed_texts(chunks)
+    logger.info(f"Generated {len(embeddings)} embeddings")
+
     metadatas = [
         {
             "source": source,
@@ -141,12 +158,14 @@ def ingest_text(
     ]
 
     # Add to collection
+    logger.info(f"Adding {len(chunks)} chunks to collection {collection.name}")
     collection.add(
         ids=ids,
         embeddings=embeddings,
         documents=chunks,
         metadatas=metadatas,
     )
+    logger.info(f"Successfully added chunks. Collection now has {collection.count()} documents")
 
     return len(chunks)
 
@@ -167,10 +186,13 @@ def ingest_pdf(
     Returns:
         Number of chunks created.
     """
+    logger.info(f"Loading PDF: {pdf_path}")
     loader = PyPDFLoader(pdf_path)
     pages = loader.load()
+    logger.info(f"Loaded {len(pages)} pages from PDF")
 
     full_text = "\n\n".join(page.page_content for page in pages)
+    logger.info(f"Extracted {len(full_text)} characters from PDF")
     source = os.path.basename(pdf_path)
 
     return ingest_text(
@@ -200,10 +222,14 @@ def get_context(
     if k is None:
         k = ai_settings.default_k
 
+    logger.info(f"Getting context for session {session_id}, query: {query[:50]}...")
     collection = create_collection(session_id)
 
     # Check if collection is empty
-    if collection.count() == 0:
+    count = collection.count()
+    logger.info(f"Collection {collection.name} has {count} documents")
+    if count == 0:
+        logger.warning(f"Collection {collection.name} is empty, no context available")
         return []
 
     # Embed query
@@ -212,11 +238,12 @@ def get_context(
     # Query collection
     results = collection.query(
         query_embeddings=[query_embedding],
-        n_results=min(k, collection.count()),
+        n_results=min(k, count),
         include=["documents"],
     )
 
     documents = results.get("documents", [[]])[0]
+    logger.info(f"Retrieved {len(documents)} context chunks")
     return documents
 
 

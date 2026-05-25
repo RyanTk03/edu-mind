@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from beanie import PydanticObjectId
 from fastapi import APIRouter
 
+from app.api import get_link_id, check_link_id
 from app.core.deps import CurrentUser
 from app.core.exceptions import BadRequestError, ForbiddenError, NotFoundError
 from app.models.exercise import Exercise, ExerciseMode, ExerciseStatus, Question, QuestionType
@@ -37,7 +38,7 @@ async def verify_session_ownership(
     if not session:
         raise NotFoundError("Session not found")
 
-    if session.user.ref.id != current_user.id:
+    if not check_link_id(session.user, current_user.id):
         raise ForbiddenError("Not your session")
 
     return session
@@ -79,7 +80,7 @@ def exercise_to_response(exercise: Exercise) -> ExerciseResponse:
     """Convert exercise model to response schema."""
     return ExerciseResponse(
         id=str(exercise.id),
-        session_id=str(exercise.session.ref.id),
+        session_id=get_link_id(exercise.session),
         title=exercise.title,
         mode=exercise.mode,
         status=exercise.status,
@@ -94,7 +95,7 @@ def exercise_to_results_response(exercise: Exercise) -> ExerciseResultsResponse:
     """Convert exercise to results response with full details."""
     return ExerciseResultsResponse(
         id=str(exercise.id),
-        session_id=str(exercise.session.ref.id),
+        session_id=get_link_id(exercise.session),
         title=exercise.title,
         mode=exercise.mode,
         status=exercise.status,
@@ -198,7 +199,7 @@ async def get_exercise(
     if not exercise:
         raise NotFoundError("Exercise not found")
 
-    if exercise.session.ref.id != session.id:
+    if not check_link_id(exercise.session, session.id):
         raise ForbiddenError("Exercise doesn't belong to this session")
 
     return exercise_to_response(exercise)
@@ -222,7 +223,7 @@ async def submit_exercise(
     if not exercise:
         raise NotFoundError("Exercise not found")
 
-    if exercise.session.ref.id != session.id:
+    if not check_link_id(exercise.session, session.id):
         raise ForbiddenError("Exercise doesn't belong to this session")
 
     if exercise.status == ExerciseStatus.COMPLETED:
@@ -304,7 +305,7 @@ async def get_exercise_results(
     if not exercise:
         raise NotFoundError("Exercise not found")
 
-    if exercise.session.ref.id != session.id:
+    if not check_link_id(exercise.session, session.id):
         raise ForbiddenError("Exercise doesn't belong to this session")
 
     if exercise.status != ExerciseStatus.COMPLETED:

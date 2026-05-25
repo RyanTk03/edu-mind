@@ -3,6 +3,7 @@
 from beanie import PydanticObjectId
 from fastapi import APIRouter
 
+from app.api import get_link_id, check_link_id
 from app.core.deps import CurrentUser
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.models.message import Message, MessageRole
@@ -26,7 +27,7 @@ async def verify_session_ownership(
     if not session:
         raise NotFoundError("Session not found")
 
-    if session.user.ref.id != current_user.id:
+    if not check_link_id(session.user, current_user.id):
         raise ForbiddenError("Not your session")
 
     return session
@@ -36,7 +37,7 @@ def message_to_response(message: Message) -> MessageResponse:
     """Convert message model to response schema."""
     return MessageResponse(
         id=str(message.id),
-        session_id=str(message.session.ref.id),
+        session_id=get_link_id(message.session),
         role=message.role,
         content=message.content,
         created_at=message.created_at,

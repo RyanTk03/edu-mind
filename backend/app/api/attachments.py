@@ -1,5 +1,6 @@
 """Attachment upload/download endpoints."""
 
+import logging
 import os
 import uuid
 from pathlib import Path
@@ -9,6 +10,7 @@ from beanie import PydanticObjectId
 from fastapi import APIRouter, BackgroundTasks, File, UploadFile
 from fastapi.responses import FileResponse
 
+from app.api import get_link_id, check_link_id
 from app.config import settings
 from app.core.deps import CurrentUser
 from app.core.exceptions import (
@@ -21,6 +23,8 @@ from app.models.attachment import Attachment
 from app.models.session import Session
 from app.schemas.attachment import AttachmentResponse, AttachmentStatusResponse
 from app.services.ai_service import AIService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sessions/{session_id}/attachments", tags=["Attachments"])
 
@@ -40,23 +44,32 @@ async def process_attachment_for_rag(
     file_type: str,
     original_filename: str,
 ):
-    """Background task to process attachment and ingest into RAG."""
+    """
+    Background task to process attachment and ingest into RAG.
+
+    This is an async function - FastAPI's BackgroundTasks will await it
+    in the same event loop after the response is sent.
+    """
+    logger.info(f"Starting RAG processing for attachment {attachment_id}")
+    attachment = None
     try:
         attachment = await Attachment.get(PydanticObjectId(attachment_id))
         if not attachment:
+            logger.error(f"Attachment {attachment_id} not found")
             return
 
         chunk_count = 0
 
         if file_type == "application/pdf":
-            # Ingest PDF using AI service
+            logger.info(f"Ingesting PDF: {file_path}")
             chunk_count = await AIService.ingest_pdf_file(
                 session_id=session_id,
                 pdf_path=file_path,
                 metadata={"filename": original_filename},
             )
+            logger.info(f"PDF ingested: {chunk_count} chunks")
         elif file_type in ("text/plain", "text/markdown"):
-            # Read and ingest text file
+            logger.info(f"Ingesting text file: {file_path}")
             async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
                 content = await f.read()
             chunk_count = await AIService.ingest_document(
@@ -64,14 +77,18 @@ async def process_attachment_for_rag(
                 content=content,
                 source=original_filename,
             )
-        # TODO: Add support for DOCX files
+            logger.info(f"Text file ingested: {chunk_count} chunks")
+        else:
+            logger.warning(f"Unsupported file type for RAG: {file_type}")
 
         # Update attachment status
         attachment.is_processed = True
         attachment.chunk_count = chunk_count
         await attachment.save()
+        logger.info(f"Attachment {attachment_id} marked as processed")
 
     except Exception as e:
+        logger.exception(f"Error processing attachment {attachment_id}: {e}")
         # Update attachment with error
         if attachment:
             attachment.is_processed = False
@@ -91,7 +108,7 @@ async def verify_session_ownership(
     if not session:
         raise NotFoundError("Session not found")
 
-    if session.user.ref.id != current_user.id:
+    if not check_link_id(session.user, current_user.id):
         raise ForbiddenError("Not your session")
 
     return session
@@ -101,7 +118,7 @@ def attachment_to_response(attachment: Attachment) -> AttachmentResponse:
     """Convert attachment model to response schema."""
     return AttachmentResponse(
         id=str(attachment.id),
-        session_id=str(attachment.session.ref.id),
+        session_id=get_link_id(attachment.session),
         filename=attachment.filename,
         original_filename=attachment.original_filename,
         file_type=attachment.file_type,
@@ -204,7 +221,7 @@ async def get_attachment(
     if not attachment:
         raise NotFoundError("Attachment not found")
 
-    if attachment.session.ref.id != session.id:
+    if not check_link_id(attachment.session, session.id):
         raise ForbiddenError("Attachment doesn't belong to this session")
 
     return attachment_to_response(attachment)
@@ -225,7 +242,7 @@ async def download_attachment(
     if not attachment:
         raise NotFoundError("Attachment not found")
 
-    if attachment.session.ref.id != session.id:
+    if not check_link_id(attachment.session, session.id):
         raise ForbiddenError("Attachment doesn't belong to this session")
 
     if not os.path.exists(attachment.file_path):
@@ -253,7 +270,7 @@ async def delete_attachment(
     if not attachment:
         raise NotFoundError("Attachment not found")
 
-    if attachment.session.ref.id != session.id:
+    if not check_link_id(attachment.session, session.id):
         raise ForbiddenError("Attachment doesn't belong to this session")
 
     # Delete file from disk
@@ -282,7 +299,7 @@ async def get_attachment_status(
     if not attachment:
         raise NotFoundError("Attachment not found")
 
-    if attachment.session.ref.id != session.id:
+    if not check_link_id(attachment.session, session.id):
         raise ForbiddenError("Attachment doesn't belong to this session")
 
     return AttachmentStatusResponse(

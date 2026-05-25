@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: str = Field(default="http://localhost:3000,http://localhost:5173")
 
+    # AI / LLM
+    groq_api_key: str = Field(default="")
+
     @computed_field
     @property
     def mongodb_url(self) -> str:
