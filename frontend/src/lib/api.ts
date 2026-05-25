@@ -330,6 +330,42 @@ export const exercises = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// QCM API
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const qcm = {
+  async list(sessionId: string) {
+    return apiFetch<import("@/types").QCMListResponse>(`/sessions/${sessionId}/qcm/`);
+  },
+
+  async get(sessionId: string, qcmId: string) {
+    return apiFetch<import("@/types").QCM>(`/sessions/${sessionId}/qcm/${qcmId}`);
+  },
+
+  async generate(sessionId: string, data: import("@/types").QCMGenerateRequest) {
+    return apiFetch<import("@/types").QCM>(`/sessions/${sessionId}/qcm/generate`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async submit(sessionId: string, qcmId: string, data: import("@/types").QCMSubmitRequest) {
+    return apiFetch<import("@/types").QCM>(`/sessions/${sessionId}/qcm/${qcmId}/submit`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getResults(sessionId: string, qcmId: string) {
+    return apiFetch<import("@/types").QCM>(`/sessions/${sessionId}/qcm/${qcmId}/results`);
+  },
+
+  async getWorkflowGraph(sessionId: string) {
+    return apiFetch<import("@/types").WorkflowGraph>(`/sessions/${sessionId}/qcm/workflow-graph`);
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Default Export
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -340,6 +376,7 @@ const api = {
   chat,
   attachments,
   exercises,
+  qcm,
 };
 
 export default api;
