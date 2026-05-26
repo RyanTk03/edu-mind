@@ -40,6 +40,22 @@ from .workflow import (
     build_workflow,
 )
 
+from .qcm_agents import (
+    QCMState,
+    generate_qcm,
+    correct_qcm,
+    correct_qcm_question,
+    evaluate_grade,
+)
+
+from .orchestrator import (
+    qcm_workflow,
+    generate_qcm_workflow,
+    submit_qcm_answers_workflow,
+    get_workflow_graph_metadata,
+    build_qcm_workflow,
+)
+
 __all__ = [
     # State
     "AgentState",
@@ -66,4 +82,16 @@ __all__ = [
     "chat",
     "create_initial_state",
     "build_workflow",
+    # QCM Agents
+    "QCMState",
+    "generate_qcm",
+    "correct_qcm",
+    "correct_qcm_question",
+    "evaluate_grade",
+    # QCM Orchestrator
+    "qcm_workflow",
+    "generate_qcm_workflow",
+    "submit_qcm_answers_workflow",
+    "get_workflow_graph_metadata",
+    "build_qcm_workflow",
 ]

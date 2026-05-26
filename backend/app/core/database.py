@@ -7,6 +7,7 @@ from app.models.session import Session
 from app.models.attachment import Attachment
 from app.models.message import Message
 from app.models.exercise import Exercise
+from app.models.qcm import QCM
 
 
 async def init_db():
@@ -22,6 +23,7 @@ async def init_db():
             Attachment,
             Message,
             Exercise,
+            QCM,
         ],
     )
 
