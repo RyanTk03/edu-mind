@@ -55,7 +55,8 @@ class UserProfileResponse(BaseModel):
     id: str
     user_id: str
     level: LearnerLevel
-    level_score: float
+    level_score: Optional[float]  # None = not assessed yet
+    exercises_completed: int
     weak_points: list[str]
     strong_points: list[str]
     preferences: dict

@@ -128,7 +128,8 @@ async def generate_exercise(
 
     # Get user profile for student level and weak points
     profile = await UserProfile.find_one(UserProfile.user.id == current_user.id)
-    student_level = profile.level_score if profile else 0.5
+    # Use 0.3 (beginner) for new users who haven't been assessed yet
+    student_level = profile.level_score if (profile and profile.level_score is not None) else 0.3
     weak_points = profile.weak_points if profile else []
 
     # Determine topic based on mode
@@ -231,7 +232,8 @@ async def submit_exercise(
 
     # Get user profile for student level
     profile = await UserProfile.find_one(UserProfile.user.id == current_user.id)
-    student_level = profile.level_score if profile else 0.5
+    # Use 0.3 (beginner) for new users who haven't been assessed yet
+    student_level = profile.level_score if (profile and profile.level_score is not None) else 0.3
 
     # Process answers
     answer_map = {a.question_order: a.answer for a in data.answers}
@@ -277,9 +279,25 @@ async def submit_exercise(
     exercise.completed_at = datetime.now(timezone.utc)
     await exercise.save()
 
+    # Update session progress
+    session.exercises_completed = (session.exercises_completed or 0) + 1
+    exercise_score = (exercise.total_score or 0) / 100  # Convert to 0-1 scale
+    if session.progress_score is None:
+        session.progress_score = exercise_score
+    else:
+        # Rolling average
+        n = session.exercises_completed
+        session.progress_score = ((session.progress_score * (n - 1)) + exercise_score) / n
+    await session.save()
+
     # Update user profile with weak points and new level
     if profile:
-        profile.level_score = student_level
+        # Set level_score (first assessment or update)
+        if profile.level_score is None:
+            profile.level_score = student_level
+        else:
+            profile.level_score = student_level
+        profile.exercises_completed = (profile.exercises_completed or 0) + 1
         for error in all_errors:
             if error and error not in profile.weak_points:
                 profile.weak_points.append(error)

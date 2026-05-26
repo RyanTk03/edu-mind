@@ -8,8 +8,16 @@ import { useAuth } from "@/lib/auth-context";
 import api from "@/lib/api";
 import { formatRelativeTime, formatFileSize } from "@/lib/utils";
 import { Button, Card, Textarea, Badge } from "@/components/ui";
-import type { Session, Message, Attachment } from "@/types";
-import { ClipboardPen, CloudUpload, MessageCircleMore } from "lucide-react";
+import { CloudUpload, MessageCircleMore } from "lucide-react";
+import {
+  ExerciseProposalCard,
+  ExerciseTypeSelectionCard,
+  QCMCard,
+  OpenExerciseCard,
+  CodeExerciseCard,
+  ExerciseResultCard,
+} from "@/components/exercise";
+import type { Session, Message, Attachment, ExerciseProposal, InlineExerciseData, InlineExerciseType } from "@/types";
 
 export default function SessionDetailPage() {
   const params = useParams();
@@ -94,12 +102,13 @@ export default function SessionDetailPage() {
     return () => clearInterval(pollInterval);
   }, [attachments, sessionId]);
 
-  const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim() || isSending) return;
 
-    const content = newMessage.trim();
-    setNewMessage("");
+  const sendMessage = async (e: React.FormEvent, customContent?: string, metadata?: Record<string, unknown>) => {
+    if (e) e.preventDefault();
+    const content = customContent || newMessage.trim();
+    if (!content || isSending) return;
+
+    if (!customContent) setNewMessage("");
     setIsSending(true);
 
     // Optimistic update - add user message immediately
@@ -109,12 +118,12 @@ export default function SessionDetailPage() {
       role: "user",
       content,
       created_at: new Date().toISOString(),
-      metadata: {},
+      metadata: metadata || {},
     };
     setMessages((prev) => [...prev, tempUserMessage]);
 
     try {
-      const aiMessage = await api.chat.sendMessage(sessionId, content);
+      const aiMessage = await api.chat.sendMessage(sessionId, content, metadata);
       // Replace temp message and add AI response
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== tempUserMessage.id),
@@ -125,10 +134,37 @@ export default function SessionDetailPage() {
       console.error("Failed to send message:", error);
       // Remove temp message on error
       setMessages((prev) => prev.filter((m) => m.id !== tempUserMessage.id));
-      setNewMessage(content);
+      if (!customContent) setNewMessage(content);
     } finally {
       setIsSending(false);
     }
+  };
+
+  // Exercise handlers
+  const handleExerciseConfirm = async (modifiedProposal: ExerciseProposal) => {
+    await sendMessage(null as unknown as React.FormEvent, "Générer l'exercice", {
+      confirm_exercise: true,
+      exercise_proposal: modifiedProposal,
+    });
+  };
+
+  // onModify is no longer used since editing is handled inline in ExerciseProposalCard
+  const handleExerciseModify = () => {
+    // This is now handled inline in the ExerciseProposalCard
+  };
+
+  const handleExerciseSubmit = async (exercise: InlineExerciseData, answer: string | string[]) => {
+    const content = Array.isArray(answer) ? JSON.stringify(answer) : answer;
+    await sendMessage(null as unknown as React.FormEvent, content, {
+      submit_exercise: true,
+      exercise_type: exercise.type,
+      exercise_id: exercise.id,
+    });
+  };
+
+  const handleExerciseTypeSelect = async (type: InlineExerciseType, typeLabel: string) => {
+    // Send a message requesting this type of exercise
+    await sendMessage(null as unknown as React.FormEvent, `Je veux ${typeLabel}`, {});
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -220,12 +256,6 @@ export default function SessionDetailPage() {
               </span>
             )}
           </button>
-          <Link
-            href={`/sessions/${sessionId}/exercises`}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
-          >
-            <ClipboardPen /> Exercises
-          </Link>
         </div>
       </header>
 
@@ -263,7 +293,15 @@ export default function SessionDetailPage() {
                   </div>
                 ) : (
                   messages.map((message) => (
-                    <MessageBubble key={message.id} message={message} />
+                    <MessageBubble
+                      key={message.id}
+                      message={message}
+                      isLoading={isSending}
+                      onExerciseConfirm={handleExerciseConfirm}
+                      onExerciseModify={handleExerciseModify}
+                      onExerciseSubmit={handleExerciseSubmit}
+                      onExerciseTypeSelect={handleExerciseTypeSelect}
+                    />
                   ))
                 )}
                 <div ref={messagesEndRef} />
@@ -424,9 +462,90 @@ export default function SessionDetailPage() {
   );
 }
 
-function MessageBubble({ message }: { message: Message }) {
-  const isUser = message.role === "user";
+interface MessageBubbleProps {
+  message: Message;
+  isLoading?: boolean;
+  onExerciseConfirm: (proposal: ExerciseProposal) => void;
+  onExerciseModify: () => void;
+  onExerciseSubmit: (exercise: InlineExerciseData, answer: string | string[]) => void;
+  onExerciseTypeSelect: (type: InlineExerciseType, typeLabel: string) => void;
+}
 
+function MessageBubble({
+  message,
+  isLoading = false,
+  onExerciseConfirm,
+  onExerciseModify,
+  onExerciseSubmit,
+  onExerciseTypeSelect,
+}: MessageBubbleProps) {
+  const isUser = message.role === "user";
+  const metadata = message.metadata || {};
+  const exerciseStatus = metadata.exercise_status;
+  const exerciseProposal = metadata.exercise_proposal as ExerciseProposal | undefined;
+  const exerciseData = metadata.exercise_data as InlineExerciseData | undefined;
+  const correctionResult = metadata.correction_result;
+
+  // Render exercise type selection card
+  if (!isUser && exerciseStatus === "type_selection") {
+    return (
+      <div className="flex justify-start">
+        <ExerciseTypeSelectionCard onSelect={onExerciseTypeSelect} />
+      </div>
+    );
+  }
+
+  // Render exercise proposal card
+  if (!isUser && exerciseStatus === "proposed" && exerciseProposal) {
+    return (
+      <div className="flex justify-start">
+        <ExerciseProposalCard
+          proposal={exerciseProposal}
+          onConfirm={onExerciseConfirm}
+          onModify={onExerciseModify}
+          isLoading={isLoading}
+        />
+      </div>
+    );
+  }
+
+  if (!isUser && exerciseStatus === "active" && exerciseData) {
+    return (
+      <div className="flex justify-start">
+        {exerciseData.type === "qcm" && (
+          <QCMCard
+            exercise={exerciseData}
+            onSubmit={(answers) => onExerciseSubmit(exerciseData, answers)}
+            isLoading={isLoading}
+          />
+        )}
+        {exerciseData.type === "code" && (
+          <CodeExerciseCard
+            exercise={exerciseData}
+            onSubmit={(code) => onExerciseSubmit(exerciseData, code)}
+            isLoading={isLoading}
+          />
+        )}
+        {exerciseData.type === "open" && (
+          <OpenExerciseCard
+            exercise={exerciseData}
+            onSubmit={(answer) => onExerciseSubmit(exerciseData, answer)}
+            isLoading={isLoading}
+          />
+        )}
+      </div>
+    );
+  }
+
+  if (!isUser && exerciseStatus === "corrected" && exerciseData && correctionResult) {
+    return (
+      <div className="flex justify-start">
+        <ExerciseResultCard result={correctionResult} exercise={exerciseData} />
+      </div>
+    );
+  }
+
+  // Default message rendering
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div

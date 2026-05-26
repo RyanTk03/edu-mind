@@ -222,10 +222,14 @@ export const chat = {
     return apiFetch<ChatHistory>(`/sessions/${sessionId}/chat`);
   },
 
-  async sendMessage(sessionId: string, content: string): Promise<Message> {
+  async sendMessage(
+    sessionId: string,
+    content: string,
+    metadata?: Record<string, unknown>
+  ): Promise<Message> {
     return apiFetch<Message>(`/sessions/${sessionId}/chat`, {
       method: "POST",
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, metadata }),
     });
   },
 

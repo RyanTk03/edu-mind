@@ -31,7 +31,8 @@ class UserProfile(Document):
 
     user: Link[User]
     level: LearnerLevel = LearnerLevel.DEBUTANT
-    level_score: float = Field(default=0.5, ge=0.0, le=1.0)  # 0-1 score for level calc
+    level_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)  # None = not assessed
+    exercises_completed: int = Field(default=0)
     weak_points: list[str] = Field(default_factory=list)
     strong_points: list[str] = Field(default_factory=list)
     preferences: dict = Field(default_factory=dict)
