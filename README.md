@@ -92,6 +92,7 @@ Frontend runs at http://localhost:3000
 
 - [Backend README](./backend/README.md) - API docs, endpoints, configuration
 - [Frontend README](./frontend/README.md) - UI setup, components, usage
+- [Demo video](https://drive.proton.me/urls/G8ZK5P18T0#OTN0Bwo6fEJm)
 
 ## Environment Variables
 
@@ -117,7 +118,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000/api
 
 ## Team
 
-School project for SDIA (Software Development & AI).
+School project for DSAI (Distributed Systems & AI).
 
 ## License
 
