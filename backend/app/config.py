@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     db_name: str = Field(default="edu_mind")
     db_options: str = Field(default="retryWrites=true&w=majority")
 
+    langchain_api_key: str = Field(default="")
+    langchain_tracing_v2: str = Field(default="")
+
     # JWT Settings
     jwt_secret_key: str = Field(default="your-secret-key-change-in-production")
     jwt_algorithm: str = Field(default="HS256")

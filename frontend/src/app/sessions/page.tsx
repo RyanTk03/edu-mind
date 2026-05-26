@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import api from "@/lib/api";
-import { formatRelativeTime } from "@/lib/utils";
+import { formatRelativeTime, getLevelColor, getLevelLabel } from "@/lib/utils";
 import { Header } from "@/components/layout";
 import { Button, Card, Input, Progress } from "@/components/ui";
 import type { Session } from "@/types";
@@ -26,21 +26,21 @@ export default function SessionsPage() {
   }, [authLoading, isAuthenticated, router]);
 
   useEffect(() => {
+    const loadSessions = async () => {
+      try {
+        const data = await api.sessions.list();
+        setSessions(data.sessions);
+      } catch (error) {
+        console.error("Failed to load sessions:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     if (isAuthenticated) {
       loadSessions();
     }
   }, [isAuthenticated]);
-
-  const loadSessions = async () => {
-    try {
-      const data = await api.sessions.list();
-      setSessions(data.sessions);
-    } catch (error) {
-      console.error("Failed to load sessions:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const createSession = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,6 +224,13 @@ export default function SessionsPage() {
                         </span>
                       </div>
                     )}
+
+                    <div className="mt-1 items-center gap-2 sm:flex">
+                      <span className="text-sm text-gray-500">Niveau:</span>
+                      <span className={`text-sm font-medium ${getLevelColor(session.level_score)}`}>
+                        {getLevelLabel(session.level_score)}
+                      </span>
+                    </div>
 
                     <div className="mt-3 flex gap-4 text-xs text-gray-500">
                       <span className="flex items-center gap-1">

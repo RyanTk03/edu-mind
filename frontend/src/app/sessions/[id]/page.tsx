@@ -6,7 +6,7 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/lib/auth-context";
 import api from "@/lib/api";
-import { formatRelativeTime, formatFileSize } from "@/lib/utils";
+import { formatRelativeTime, formatFileSize, getLevelColor, getLevelLabel } from "@/lib/utils";
 import { Button, Card, Textarea, Badge } from "@/components/ui";
 import { CloudUpload, MessageCircleMore } from "lucide-react";
 import {
@@ -227,6 +227,13 @@ export default function SessionDetailPage() {
             </svg>
           </Link>
           <h1 className="font-semibold text-gray-900">{session?.title}</h1>
+
+          <div className="ml-2 items-center gap-2 sm:flex">
+            <span className="text-sm text-gray-500">Niveau:</span>
+            <span className={`text-sm font-medium ${getLevelColor(session?.level_score)}`}>
+              {getLevelLabel(session?.level_score)}
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

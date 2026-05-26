@@ -32,15 +32,6 @@ export function Header() {
 
         {isAuthenticated ? (
           <div className="flex items-center gap-4">
-            {profile && (
-              <div className="hidden items-center gap-2 sm:flex">
-                <span className="text-sm text-gray-500">Niveau:</span>
-                <span className={`text-sm font-medium ${getLevelColor(profile.level_score)}`}>
-                  {getLevelLabel(profile.level_score)}
-                </span>
-              </div>
-            )}
-
             <div className="flex items-center gap-3">
               <Link href="/profile" className="flex items-center gap-2">
                 <Avatar name={user?.name || "U"} size="sm" />

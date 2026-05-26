@@ -51,6 +51,7 @@ export interface Session {
   // Per-session progress
   progress_score?: number | null;  // null = no exercises completed
   exercises_completed?: number;
+  level_score?: number;
 }
 
 export interface SessionCreate {
