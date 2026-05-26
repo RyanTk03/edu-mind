@@ -6,8 +6,9 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/lib/auth-context";
 import api from "@/lib/api";
-import { formatRelativeTime, formatFileSize } from "@/lib/utils";
+import { formatRelativeTime, formatFileSize, getLevelColor, getLevelLabel } from "@/lib/utils";
 import { Button, Card, Textarea, Badge } from "@/components/ui";
+import { CloudUpload, MessageCircleMore } from "lucide-react";
 import {
   ExerciseProposalCard,
   ExerciseTypeSelectionCard,
@@ -42,10 +43,28 @@ export default function SessionDetailPage() {
   }, [authLoading, isAuthenticated, router]);
 
   useEffect(() => {
+    const loadSessionData = async () => {
+      try {
+        const [sessionData, chatData, attachmentsData] = await Promise.all([
+          api.sessions.get(sessionId),
+          api.chat.getHistory(sessionId),
+          api.attachments.list(sessionId),
+        ]);
+        setSession(sessionData);
+        setMessages(chatData.messages);
+        setAttachments(attachmentsData);
+      } catch (error) {
+        console.error("Failed to load session:", error);
+        router.push("/sessions");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     if (isAuthenticated && sessionId) {
       loadSessionData();
     }
-  }, [isAuthenticated, sessionId]);
+  }, [isAuthenticated, router, sessionId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -83,23 +102,6 @@ export default function SessionDetailPage() {
     return () => clearInterval(pollInterval);
   }, [attachments, sessionId]);
 
-  const loadSessionData = async () => {
-    try {
-      const [sessionData, chatData, attachmentsData] = await Promise.all([
-        api.sessions.get(sessionId),
-        api.chat.getHistory(sessionId),
-        api.attachments.list(sessionId),
-      ]);
-      setSession(sessionData);
-      setMessages(chatData.messages);
-      setAttachments(attachmentsData);
-    } catch (error) {
-      console.error("Failed to load session:", error);
-      router.push("/sessions");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const sendMessage = async (e: React.FormEvent, customContent?: string, metadata?: Record<string, unknown>) => {
     if (e) e.preventDefault();
@@ -225,18 +227,25 @@ export default function SessionDetailPage() {
             </svg>
           </Link>
           <h1 className="font-semibold text-gray-900">{session?.title}</h1>
+
+          <div className="ml-2 items-center gap-2 sm:flex">
+            <span className="text-sm text-gray-500">Niveau:</span>
+            <span className={`text-sm font-medium ${getLevelColor(session?.level_score)}`}>
+              {getLevelLabel(session?.level_score)}
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => setActiveTab("chat")}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
               activeTab === "chat"
                 ? "bg-blue-100 text-blue-700"
                 : "text-gray-600 hover:bg-gray-100"
             }`}
           >
-            Chat
+            <MessageCircleMore /> Chat
           </button>
           <button
             onClick={() => setActiveTab("files")}
@@ -246,6 +255,7 @@ export default function SessionDetailPage() {
                 : "text-gray-600 hover:bg-gray-100"
             }`}
           >
+            <CloudUpload />
             Fichiers
             {attachments.length > 0 && (
               <span className="rounded-full bg-gray-200 px-1.5 py-0.5 text-xs">

@@ -77,7 +77,7 @@ async def send_message(
 
     # Get user profile for student level
     profile = await UserProfile.find_one(UserProfile.user.id == current_user.id)
-    student_level = profile.level_score if (profile and profile.level_score is not None) else 0.3
+    student_level = session.level_score if (session and session.level_score is not None) else 0.3
 
     # Get session metadata for current exercise state
     session_metadata = session.metadata or {}
@@ -189,8 +189,8 @@ async def send_message(
         await session.save()
 
         # Update user profile level
-        if profile and result.get("updated_level"):
-            profile.level_score = result["updated_level"]
+        if session and result.get("updated_level"):
+            session.level_score = result["updated_level"]
             # Update weak/strong points from correction
             correction = result["correction"]
             if correction.get("errors"):
@@ -198,6 +198,7 @@ async def send_message(
                     if error not in profile.weak_points:
                         profile.weak_points.append(error)
             await profile.save()
+            await session.save()
 
     return message_to_response(ai_message)
 
