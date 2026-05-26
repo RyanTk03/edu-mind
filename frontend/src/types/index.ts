@@ -154,3 +154,101 @@ export interface ExerciseListResponse {
   exercises: Exercise[];
   total: number;
 }
+
+// ── QCM ───────────────────────────────────────────────────────────────────────
+
+export type QCMDifficulty = "easy" | "medium" | "hard";
+export type QCMStatus = "generated" | "submitted" | "evaluated";
+
+export interface QCMOption {
+  label: string;
+  text: string;
+}
+
+export interface QCMQuestion {
+  order: number;
+  question_text: string;
+  options: QCMOption[];
+  correct_answer?: string;   // only exposed after evaluation
+  explanation?: string;
+  student_answer: string | null;
+  is_correct: boolean | null;
+  score: number | null;
+  feedback: string | null;
+  gap_analysis: string | null;
+}
+
+export interface QCMGradeReport {
+  total_score: number;
+  correct_count: number;
+  total_questions: number;
+  grade_letter: string;
+  grade_label: string;
+  strong_points: string[];
+  weak_points: string[];
+  recommendations: string[];
+  summary: string;
+}
+
+export interface QCM {
+  id: string;
+  session_id: string;
+  title: string;
+  topic: string;
+  difficulty: QCMDifficulty;
+  status: QCMStatus;
+  num_questions: number;
+  questions: QCMQuestion[];
+  grade_report: QCMGradeReport | null;
+  created_at: string;
+  submitted_at: string | null;
+  evaluated_at: string | null;
+}
+
+export interface QCMGenerateRequest {
+  topic: string;
+  num_questions?: number;
+  difficulty?: QCMDifficulty;
+  title?: string;
+}
+
+export interface QCMAnswerItem {
+  question_order: number;
+  answer: string;
+}
+
+export interface QCMSubmitRequest {
+  answers: QCMAnswerItem[];
+}
+
+export interface QCMListResponse {
+  qcms: QCM[];
+  total: number;
+}
+
+// Workflow graph visualization
+
+export interface WorkflowNode {
+  id: string;
+  label: string;
+  type: "start" | "agent" | "end";
+  agent_type?: "retrieval" | "generation" | "correction" | "evaluation";
+  description: string;
+  inputs: string[];
+  outputs: string[];
+}
+
+export interface WorkflowEdge {
+  source: string;
+  target: string;
+  label: string;
+  type: "direct" | "conditional";
+}
+
+export interface WorkflowGraph {
+  workflow_name: string;
+  description: string;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  state_schema: Record<string, string>;
+}

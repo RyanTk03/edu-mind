@@ -20,6 +20,7 @@ from .rag import (
 from .router import classify_intent, get_intent
 from .workflow import chat, AgentState
 from .config import ai_settings
+from .qcm_workflow import run_generate_qcm, run_submit_qcm, get_qcm_workflow_graph
 
 __all__ = [
     # Agents
@@ -41,4 +42,8 @@ __all__ = [
     "AgentState",
     # Config
     "ai_settings",
+    # QCM
+    "run_generate_qcm",
+    "run_submit_qcm",
+    "get_qcm_workflow_graph",
 ]
