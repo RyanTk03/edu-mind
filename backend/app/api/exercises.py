@@ -163,7 +163,7 @@ async def generate_exercise(
 
         question = Question(
             order=i + 1,
-            type=QuestionType.OPEN,  # AI generates open questions by default
+            type=QuestionType.QCM,  # AI generates MCQ questions by default
             question_text=ai_exercise.get("question", ""),
             correct_answer=ai_exercise.get("expected_answer", ""),
             options=[],  # Could be extended for QCM
