@@ -134,6 +134,7 @@ def generate_exercise(
     context: Optional[list[str]] = None,
     student_level: float = 0.5,
     history: Optional[list[dict]] = None,
+    exercise_type: str = "open",
 ) -> dict:
     """
     Generate an exercise adapted to the topic and student level.
@@ -144,6 +145,7 @@ def generate_exercise(
         context: List of relevant RAG chunks.
         student_level: Student level between 0.0 and 1.0.
         history: Recent exercise history.
+        exercise_type: "open", "code", or "qcm".
 
     Returns:
         Dict with question, expected_answer, and hints.
@@ -233,6 +235,31 @@ _INFER_PROMPT = ChatPromptTemplate.from_messages([
     )),
 ])
 
+_OPEN_ANSWER_CHECK_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", (
+        "Tu es un correcteur pédagogique expert.\n"
+        "Tu dois évaluer si la réponse de l'étudiant est correcte ou non.\n"
+        "Base-toi sur la réponse attendue et les sources du cours.\n\n"
+        "IMPORTANT : Sois juste et reconnaît les bonnes réponses même si elles sont formulées différemment.\n"
+        "Une réponse peut être correcte même si elle n'est pas identique mot pour mot.\n"
+        "Évalue le fond, pas la forme.\n\n"
+        "Réponds UNIQUEMENT en JSON valide :\n"
+        "{{\n"
+        '  "is_correct"  : true/false,\n'
+        '  "score"       : 0.0 à 1.0 (score partiel possible),\n'
+        '  "reasoning"   : "<explication brève de ta décision>"\n'
+        "}}"
+    )),
+    ("human", (
+        "## Question\n{question}\n\n"
+        "## Réponse attendue\n{expected_answer}\n\n"
+        "## Réponse de l'étudiant\n{student_answer}\n\n"
+        "## Sources du cours\n{formatted_context}\n\n"
+        "La réponse de l'étudiant est-elle correcte ?"
+    )),
+])
+
+
 _GAP_ANALYSIS_PROMPT = ChatPromptTemplate.from_messages([
     ("system", (
         "Tu es un analyste pédagogique expert.\n"
@@ -283,7 +310,7 @@ def _infer_answer_node(state: _CorrectionState) -> _CorrectionState:
 
 
 def _mcq_check_node(state: _CorrectionState) -> _CorrectionState:
-    """Deterministic correction: compare student answer to expected."""
+    """Correction: MCQ single letter is deterministic, open/code uses LLM."""
     student = state["student_answer"].strip()
     expected = state["exercise"].get("expected_answer", "")
     inferred = state.get("llm_inferred_answer", expected)
@@ -293,14 +320,61 @@ def _mcq_check_node(state: _CorrectionState) -> _CorrectionState:
     if is_single_letter:
         correct_letter = expected.strip().upper()[:1] if len(expected.strip()) == 1 else ""
         is_correct = student.upper() == correct_letter if correct_letter else False
+        score = 1.0 if is_correct else 0.0
         valid_choice = True
     else:
-        # Open answer: delegate to gap_analysis
-        is_correct = False
+        # Open/code answer: use LLM to evaluate
         valid_choice = bool(student)
+        if not valid_choice:
+            is_correct = False
+            score = 0.0
+        else:
+            # Use LLM to compare student answer with expected answer
+            llm = _get_llm()
+            chain = _OPEN_ANSWER_CHECK_PROMPT | llm
+            response = chain.invoke({
+                "question": state["exercise"].get("question", ""),
+                "expected_answer": expected or inferred,
+                "student_answer": student,
+                "formatted_context": state["formatted_context"],
+            })
+
+            raw = response.content.strip()
+            # Strip JSON fences
+            if raw.startswith("```"):
+                parts = raw.split("```")
+                raw = parts[1] if len(parts) > 1 else raw
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            raw = raw.strip()
+
+            try:
+                result = json.loads(raw)
+                is_correct = result.get("is_correct", False)
+                score = float(result.get("score", 0.0))
+                # Clamp score to 0-1
+                score = max(0.0, min(1.0, score))
+            except (json.JSONDecodeError, ValueError):
+                # Fallback: check if student answer contains key concepts from expected
+                expected_lower = (expected or inferred).lower()
+                student_lower = student.lower()
+                # Simple heuristic: if significant overlap, partial credit
+                if expected_lower and student_lower:
+                    expected_words = set(expected_lower.split())
+                    student_words = set(student_lower.split())
+                    overlap = len(expected_words & student_words)
+                    if overlap >= len(expected_words) * 0.5:
+                        is_correct = True
+                        score = 0.7
+                    else:
+                        is_correct = False
+                        score = 0.0
+                else:
+                    is_correct = False
+                    score = 0.0
 
     state["correction_result"] = {
-        "score": 1.0 if is_correct else 0.0,
+        "score": score,
         "verdict": "correct" if is_correct else "incorrect",
         "is_correct": is_correct,
         "student_answer": student,
@@ -342,10 +416,12 @@ def _hitl_node(state: _CorrectionState) -> _CorrectionState:
 
 
 def _gap_analysis_node(state: _CorrectionState) -> _CorrectionState:
-    """LLM analysis of learning gaps (only if incorrect)."""
+    """LLM analysis of learning gaps (only if incorrect or partial score)."""
     result = state["correction_result"]
+    score = result.get("score", 0.0)
 
-    if result["is_correct"]:
+    # Skip gap analysis for fully correct answers (score >= 0.9)
+    if score >= 0.9:
         state["identified_gaps"] = []
         state["correction_reasoning"] = "Réponse correcte."
         return state
@@ -390,7 +466,8 @@ def _update_level_node(state: _CorrectionState) -> _CorrectionState:
     score = state["correction_result"]["score"]
     previous_level = state.get("student_level", 0.5)
 
-    alpha = ai_settings.alpha_correct if score == 1.0 else ai_settings.alpha_incorrect
+    # Use alpha_correct for good scores (>= 0.5), alpha_incorrect otherwise
+    alpha = ai_settings.alpha_correct if score >= 0.5 else ai_settings.alpha_incorrect
     new_level = alpha * score + (1 - alpha) * previous_level
     new_level = round(max(ai_settings.level_min, min(ai_settings.level_max, new_level)), 3)
 

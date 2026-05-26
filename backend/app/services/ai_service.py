@@ -31,7 +31,11 @@ class AIService:
         message: str,
         student_level: float = 0.5,
         history: Optional[list[dict]] = None,
+        conversation_history: Optional[list[dict]] = None,
         current_exercise: Optional[dict] = None,
+        exercise_proposal: Optional[dict] = None,
+        confirm_exercise: bool = False,
+        submit_exercise: bool = False,
     ) -> dict:
         """
         Process a user message through the AI workflow.
@@ -41,23 +45,32 @@ class AIService:
             message: User's message.
             student_level: Current student level (0.0-1.0).
             history: Previous exercise history.
+            conversation_history: Recent conversation messages.
             current_exercise: Ongoing exercise (if any).
+            exercise_proposal: Pending exercise proposal (if any).
+            confirm_exercise: Whether user is confirming an exercise proposal.
+            submit_exercise: Whether user is submitting an exercise answer.
 
         Returns:
-            Dict with response, intent, current_exercise, correction, updated_level.
+            Dict with response, intent, current_exercise, exercise_proposal, correction, updated_level.
         """
         result = chat(
             session_id=session_id,
             message=message,
             student_level=student_level,
             history=history,
+            conversation_history=conversation_history,
             current_exercise=current_exercise,
+            exercise_proposal=exercise_proposal,
+            confirm_exercise=confirm_exercise,
+            submit_exercise=submit_exercise,
         )
 
         return {
             "response": result.get("response", ""),
             "intent": result.get("intent"),
             "current_exercise": result.get("current_exercise"),
+            "exercise_proposal": result.get("exercise_proposal"),
             "correction": result.get("correction"),
             "updated_level": result.get("updated_level"),
             "context": result.get("context", []),

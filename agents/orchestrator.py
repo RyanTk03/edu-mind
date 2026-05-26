@@ -32,7 +32,13 @@ def qcm_rag_node(state: QCMState) -> dict:
     """
     [1] RAG Retrieval
     Fetch relevant document chunks from ChromaDB for the requested topic.
+    If context is already provided (pre-fetched), skip retrieval.
     """
+    # If context already provided, use it
+    existing_context = state.get("context", [])
+    if existing_context:
+        return {"context": existing_context}
+
     session_id = state.get("session_id", "default")
     topic      = state.get("topic", "")
     num_q      = state.get("num_questions", 5)
@@ -281,9 +287,18 @@ def generate_qcm_workflow(
     num_questions: int,
     difficulty   : str = "medium",
     student_level: float = 0.5,
+    context      : Optional[list[str]] = None,
 ) -> dict:
     """
     Run the generation phase only (RAG → generator).
+
+    Args:
+        session_id: Session ID for RAG retrieval.
+        topic: Topic for the QCM.
+        num_questions: Number of questions to generate.
+        difficulty: Difficulty level (easy, medium, hard).
+        student_level: Student's current level (0.0-1.0).
+        context: Pre-fetched context (if None, RAG will fetch it).
 
     Returns:
         State dict with 'questions' key populated.
@@ -294,7 +309,7 @@ def generate_qcm_workflow(
         "num_questions"       : num_questions,
         "difficulty"          : difficulty,
         "student_level"       : student_level,
-        "context"             : [],
+        "context"             : context or [],  # Use provided context or empty (RAG will fill)
         "questions"           : None,
         "student_answers"     : None,   # no answers → workflow stops after generation
         "corrected_questions" : None,

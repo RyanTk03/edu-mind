@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import api from "@/lib/api";
 import { formatRelativeTime } from "@/lib/utils";
 import { Header } from "@/components/layout";
-import { Button, Card, Input } from "@/components/ui";
+import { Button, Card, Input, Progress } from "@/components/ui";
 import type { Session } from "@/types";
 
 export default function SessionsPage() {
@@ -205,7 +205,27 @@ export default function SessionsPage() {
                       </button>
                     </div>
 
-                    <div className="mt-4 flex gap-4 text-xs text-gray-500">
+                    {/* Per-session progress */}
+                    {(session.exercises_completed ?? 0) > 0 && (
+                      <div className="mt-3 flex items-center gap-2">
+                        <Progress
+                          value={(session.progress_score ?? 0) * 100}
+                          className="h-1.5 flex-1"
+                          indicatorClassName={
+                            (session.progress_score ?? 0) < 0.35
+                              ? "bg-orange-500"
+                              : (session.progress_score ?? 0) < 0.65
+                              ? "bg-blue-500"
+                              : "bg-green-500"
+                          }
+                        />
+                        <span className="text-xs font-medium text-gray-600">
+                          {Math.round((session.progress_score ?? 0) * 100)}%
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex gap-4 text-xs text-gray-500">
                       <span className="flex items-center gap-1">
                         <svg
                           className="h-3.5 w-3.5"
@@ -238,6 +258,24 @@ export default function SessionsPage() {
                         </svg>
                         {session.attachment_count || 0} fichiers
                       </span>
+                      {(session.exercises_completed ?? 0) > 0 && (
+                        <span className="flex items-center gap-1">
+                          <svg
+                            className="h-3.5 w-3.5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                            />
+                          </svg>
+                          {session.exercises_completed} exercice{(session.exercises_completed ?? 0) > 1 ? "s" : ""}
+                        </span>
+                      )}
                     </div>
                   </Card>
                 </Link>

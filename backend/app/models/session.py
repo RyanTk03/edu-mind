@@ -16,6 +16,9 @@ class Session(Document):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     metadata: dict = Field(default_factory=dict)  # For AI state (current_exercise, history)
+    # Per-session progress tracking
+    progress_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    exercises_completed: int = Field(default=0)
 
     class Settings:
         name = "sessions"

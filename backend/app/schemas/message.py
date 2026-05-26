@@ -12,6 +12,7 @@ class MessageCreate(BaseModel):
     """Schema for creating a message."""
 
     content: str = Field(min_length=1, max_length=10000)
+    metadata: Optional[dict] = Field(default=None, description="Additional metadata for exercise actions")
 
 
 class MessageResponse(BaseModel):
