@@ -25,8 +25,9 @@ export default function ProfilePage() {
     );
   }
 
-  const levelScore = profile?.level_score ?? 0.5;
-  const levelPercent = Math.round(levelScore * 100);
+  const levelScore = profile?.level_score;  // Keep null if not assessed
+  const isAssessed = levelScore !== null && levelScore !== undefined;
+  const levelPercent = isAssessed ? Math.round(levelScore * 100) : 0;
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
@@ -57,32 +58,56 @@ export default function ProfilePage() {
               <CardTitle>Niveau de progression</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="mb-4 flex items-center justify-between">
-                <span className={`text-2xl font-bold ${getLevelColor(levelScore)}`}>
-                  {getLevelLabel(levelScore)}
-                </span>
-                <span className="text-lg font-medium text-gray-700">
-                  {levelPercent}%
-                </span>
-              </div>
+              {isAssessed ? (
+                <>
+                  <div className="mb-4 flex items-center justify-between">
+                    <span className={`text-2xl font-bold ${getLevelColor(levelScore)}`}>
+                      {getLevelLabel(levelScore)}
+                    </span>
+                    <span className="text-lg font-medium text-gray-700">
+                      {levelPercent}%
+                    </span>
+                  </div>
 
-              <Progress
-                value={levelPercent}
-                className="h-3"
-                indicatorClassName={
-                  levelScore < 0.35
-                    ? "bg-orange-500"
-                    : levelScore < 0.65
-                    ? "bg-blue-500"
-                    : "bg-green-500"
-                }
-              />
+                  <Progress
+                    value={levelPercent}
+                    className="h-3"
+                    indicatorClassName={
+                      levelScore < 0.35
+                        ? "bg-orange-500"
+                        : levelScore < 0.65
+                        ? "bg-blue-500"
+                        : "bg-green-500"
+                    }
+                  />
 
-              <div className="mt-4 flex justify-between text-sm text-gray-500">
-                <span>Débutant</span>
-                <span>Intermédiaire</span>
-                <span>Avancé</span>
-              </div>
+                  <div className="mt-4 flex justify-between text-sm text-gray-500">
+                    <span>Débutant</span>
+                    <span>Intermédiaire</span>
+                    <span>Avancé</span>
+                  </div>
+
+                  {profile?.exercises_completed !== undefined && profile.exercises_completed > 0 && (
+                    <p className="mt-4 text-sm text-gray-600">
+                      {profile.exercises_completed} exercice{profile.exercises_completed > 1 ? "s" : ""} complété{profile.exercises_completed > 1 ? "s" : ""}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <div className="py-4 text-center">
+                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
+                    <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <p className={`text-lg font-medium ${getLevelColor(levelScore)}`}>
+                    {getLevelLabel(levelScore)}
+                  </p>
+                  <p className="mt-2 text-sm text-gray-600">
+                    Complétez votre premier exercice pour évaluer votre niveau
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

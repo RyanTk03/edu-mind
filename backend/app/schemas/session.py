@@ -32,6 +32,9 @@ class SessionResponse(BaseModel):
     attachment_count: int = 0
     message_count: int = 0
     exercise_count: int = 0
+    # Per-session progress
+    progress_score: Optional[float] = None  # None = no exercises completed
+    exercises_completed: int = 0
 
     class Config:
         from_attributes = True

@@ -14,7 +14,8 @@ export interface UserProfile {
   id: string;
   user_id: string;
   level: "débutant" | "intermédiaire" | "avancé";
-  level_score: number;
+  level_score: number | null;  // null = not assessed yet
+  exercises_completed: number;
   weak_points: string[];
   strong_points: string[];
   preferences: Record<string, unknown>;
@@ -47,6 +48,9 @@ export interface Session {
   attachment_count?: number;
   message_count?: number;
   exercise_count?: number;
+  // Per-session progress
+  progress_score?: number | null;  // null = no exercises completed
+  exercises_completed?: number;
 }
 
 export interface SessionCreate {

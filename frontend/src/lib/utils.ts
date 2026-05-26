@@ -35,13 +35,15 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function getLevelLabel(score: number): string {
+export function getLevelLabel(score: number | null | undefined): string {
+  if (score === null || score === undefined) return "Non évalué";
   if (score < 0.35) return "Débutant";
   if (score < 0.65) return "Intermédiaire";
   return "Avancé";
 }
 
-export function getLevelColor(score: number): string {
+export function getLevelColor(score: number | null | undefined): string {
+  if (score === null || score === undefined) return "text-gray-400";
   if (score < 0.35) return "text-orange-500";
   if (score < 0.65) return "text-blue-500";
   return "text-green-500";
