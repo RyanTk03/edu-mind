@@ -43,20 +43,34 @@ def run_generate_qcm(
     num_questions: int,
     difficulty   : str  = "medium",
     student_level: float = 0.5,
+    context      : Optional[list[str]] = None,
 ) -> list[dict]:
     """
     Generate QCM questions via the orchestrator workflow.
+
+    Args:
+        session_id: Session ID for RAG retrieval.
+        topic: Topic for the QCM.
+        num_questions: Number of questions to generate.
+        difficulty: Difficulty level (easy, medium, hard).
+        student_level: Student's current level (0.0-1.0).
+        context: Pre-fetched context from RAG and conversation.
 
     Returns:
         List of question dicts with order, question_text, options,
         correct_answer, explanation.
     """
+    # If no context provided, fetch from RAG
+    if context is None:
+        context = get_context(session_id=session_id, query=topic, k=10)
+
     result = generate_qcm_workflow(
         session_id    = session_id,
         topic         = topic,
         num_questions = num_questions,
         difficulty    = difficulty,
         student_level = student_level,
+        context       = context,
     )
     return result.get("questions", [])
 

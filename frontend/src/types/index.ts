@@ -61,16 +61,76 @@ export interface SessionCreate {
 // Messages
 export type MessageRole = "user" | "ai";
 
+// Exercise types for inline chat exercises
+export type InlineExerciseType = "qcm" | "code" | "open";
+export type InlineExerciseStatus = "type_selection" | "proposed" | "active" | "submitted" | "corrected";
+
+export interface ExerciseProposal {
+  type: InlineExerciseType;
+  topic: string;
+  num_questions: number;
+  difficulty: "easy" | "medium" | "hard";
+}
+
+export interface InlineExerciseData {
+  id?: string;
+  type: InlineExerciseType;
+  topic?: string;
+  difficulty?: string;
+  question?: string;  // For open/code
+  expected_answer?: string;
+  hints?: string[];
+  questions?: QCMQuestion[];  // For QCM
+  num_questions?: number;
+}
+
+export interface CorrectedQuestion {
+  order: number;
+  question_text: string;
+  options?: QCMOption[];
+  correct_answer: string;
+  student_answer: string;
+  is_correct: boolean;
+  score: number;
+  feedback?: string;
+  gap_analysis?: string;
+  explanation?: string;
+}
+
+export interface CorrectionResult {
+  is_correct: boolean;
+  score: number;
+  errors: string[];
+  feedback_hints: string[];
+  updated_level: number;
+  verdict?: string;
+  // QCM-specific fields
+  correct_count?: number;
+  total_questions?: number;
+  grade_letter?: string;
+  summary?: string;
+  strong_points?: string[];
+  corrected_questions?: CorrectedQuestion[];
+}
+
+export interface MessageMetadata {
+  intent?: "question" | "exercise" | "answer" | "confirmation";
+  has_exercise?: boolean;
+  // Exercise-specific metadata
+  exercise_proposal?: ExerciseProposal;
+  exercise_data?: InlineExerciseData;
+  exercise_type?: InlineExerciseType;
+  exercise_status?: InlineExerciseStatus;
+  correction_result?: CorrectionResult;
+}
+
 export interface Message {
   id: string;
   session_id: string;
   role: MessageRole;
   content: string;
   created_at: string;
-  metadata: {
-    intent?: "question" | "exercise" | "answer";
-    has_exercise?: boolean;
-  };
+  metadata: MessageMetadata;
 }
 
 export interface ChatHistory {

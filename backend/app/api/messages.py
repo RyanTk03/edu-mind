@@ -77,38 +77,102 @@ async def send_message(
 
     # Get user profile for student level
     profile = await UserProfile.find_one(UserProfile.user.id == current_user.id)
-    student_level = profile.level_score if profile else 0.5
+    student_level = profile.level_score if (profile and profile.level_score is not None) else 0.3
 
     # Get session metadata for current exercise state
     session_metadata = session.metadata or {}
     current_exercise = session_metadata.get("current_exercise")
-    history = session_metadata.get("exercise_history", [])
+    exercise_proposal = session_metadata.get("exercise_proposal")
+    exercise_history = session_metadata.get("exercise_history", [])
+
+    # Get recent conversation messages for context
+    recent_messages = await Message.find(
+        Message.session.id == session.id
+    ).sort("-created_at").limit(10).to_list()
+
+    # Format conversation history (oldest first)
+    conversation_history = [
+        {"role": msg.role.value, "content": msg.content}
+        for msg in reversed(recent_messages)
+    ]
+
+    # Check for exercise actions in request metadata
+    request_metadata = data.metadata or {}
+
+    # If confirming exercise, use the proposal from metadata or session
+    if request_metadata.get("confirm_exercise"):
+        exercise_proposal = request_metadata.get("exercise_proposal") or exercise_proposal
+
+    # If submitting exercise, mark as answer intent
+    submit_exercise = request_metadata.get("submit_exercise", False)
 
     # Process message through AI workflow
     result = await AIService.process_message(
         session_id=session_id,
         message=data.content,
         student_level=student_level,
-        history=history,
+        history=exercise_history,
+        conversation_history=conversation_history,
         current_exercise=current_exercise,
+        exercise_proposal=exercise_proposal,
+        confirm_exercise=request_metadata.get("confirm_exercise", False),
+        submit_exercise=submit_exercise,
     )
+
+    # Build message metadata
+    message_metadata = {
+        "intent": result.get("intent"),
+        "has_exercise": result.get("current_exercise") is not None,
+    }
+
+    # Add exercise type selection prompt if present
+    if result.get("exercise_type_selection"):
+        message_metadata["exercise_status"] = "type_selection"
+
+    # Add exercise proposal info if present
+    elif result.get("exercise_proposal"):
+        message_metadata["exercise_proposal"] = result["exercise_proposal"]
+        message_metadata["exercise_status"] = "proposed"
+
+    # Add exercise data if generated
+    if result.get("current_exercise"):
+        message_metadata["exercise_data"] = result["current_exercise"]
+        message_metadata["exercise_type"] = result["current_exercise"].get("type", "open")
+        message_metadata["exercise_status"] = "active"
+
+    # Add correction result if present
+    if result.get("correction"):
+        message_metadata["correction_result"] = result["correction"]
+        message_metadata["exercise_status"] = "corrected"
 
     # Save AI response
     ai_message = Message(
         session=session,
         role=MessageRole.AI,
         content=result["response"],
-        metadata={
-            "intent": result.get("intent"),
-            "has_exercise": result.get("current_exercise") is not None,
-        },
+        metadata=message_metadata,
     )
     await ai_message.insert()
 
-    # Update session metadata with exercise state
+    # Update session metadata with exercise proposal
+    session.metadata = session.metadata or {}
+    needs_save = False
+
+    if result.get("exercise_proposal"):
+        session.metadata["exercise_proposal"] = result["exercise_proposal"]
+        needs_save = True
+    elif "exercise_proposal" in result and result["exercise_proposal"] is None:
+        # Explicitly cleared (user clicked Modifier)
+        session.metadata["exercise_proposal"] = None
+        needs_save = True
+
     if result.get("current_exercise"):
-        session.metadata = session.metadata or {}
+        # Exercise generated, clear proposal
+        session.metadata["exercise_proposal"] = None
         session.metadata["current_exercise"] = result["current_exercise"]
+        needs_save = True
+
+    if needs_save:
         await session.save()
 
     # Clear exercise after correction
